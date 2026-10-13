@@ -1,11 +1,14 @@
 import { Test } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { ArticleStatus } from '@prisma/client';
+import { of, throwError } from 'rxjs';
 import { ArticlesService } from './articles.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { MODERATION_BUS } from '../messaging/messaging.module';
 
 describe('ArticlesService', () => {
   let service: ArticlesService;
+  let bus: { emit: jest.Mock };
   let prisma: {
     article: {
       create: jest.Mock;
@@ -23,10 +26,12 @@ describe('ArticlesService', () => {
       },
     };
 
+    bus = { emit: jest.fn(() => of(true)) };
     const moduleRef = await Test.createTestingModule({
       providers: [
         ArticlesService,
         { provide: PrismaService, useValue: prisma },
+        { provide: MODERATION_BUS, useValue: bus },
       ],
     }).compile();
 
@@ -54,6 +59,49 @@ describe('ArticlesService', () => {
       data: { ...dto, sellerId: 'seller-1', status: ArticleStatus.DRAFT },
     });
     expect(result.status).toBe(ArticleStatus.DRAFT);
+    expect(bus.emit).toHaveBeenCalledWith('article.submitted', {
+      articleId: '1',
+      sellerId: 'seller-1',
+      ...dto,
+    });
+  });
+
+  it("ne publie pas d'événement si la persistance échoue", async () => {
+    prisma.article.create.mockRejectedValue(new Error('db down'));
+
+    await expect(
+      service.create(
+        {
+          title: 'Timbre rare 1920',
+          description:
+            'Un timbre en excellent état, provenance certifiée, description suffisamment longue.',
+          price: 42,
+          shippingCost: 5,
+          category: 'timbres',
+        },
+        'seller-1',
+      ),
+    ).rejects.toThrow('db down');
+    expect(bus.emit).not.toHaveBeenCalled();
+  });
+
+  it("propage l'erreur si le bus RabbitMQ est indisponible", async () => {
+    prisma.article.create.mockResolvedValue({ id: '2' });
+    bus.emit.mockReturnValue(throwError(() => new Error('broker down')));
+
+    await expect(
+      service.create(
+        {
+          title: 'Timbre rare 1920',
+          description:
+            'Un timbre en excellent état, provenance certifiée, description suffisamment longue.',
+          price: 42,
+          shippingCost: 5,
+          category: 'timbres',
+        },
+        'seller-1',
+      ),
+    ).rejects.toThrow('broker down');
   });
 
   it("lève une NotFoundException si l'article est introuvable", async () => {
