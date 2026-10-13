@@ -11,6 +11,7 @@ import {
 import * as request from 'supertest';
 import { of } from 'rxjs';
 import { AppModule } from '../app.module';
+import { ModerationResultsController } from './moderation-results.controller';
 import { KEYCLOAK_OPTIONS, KeycloakOptions } from '../auth/keycloak.options';
 import { MODERATION_BUS } from '../messaging/messaging.module';
 import { PrismaService } from '../prisma/prisma.service';
@@ -39,7 +40,12 @@ describe('Articles API - intégration sécurité (JWT Keycloak)', () => {
   let untrustedKey: KeyLike;
   let bus: { emit: jest.Mock };
   let prisma: {
-    article: { create: jest.Mock; findMany: jest.Mock; findUnique: jest.Mock };
+    article: {
+      create: jest.Mock;
+      findMany: jest.Mock;
+      findUnique: jest.Mock;
+      updateMany: jest.Mock;
+    };
   };
 
   async function signToken(
@@ -83,6 +89,7 @@ describe('Articles API - intégration sécurité (JWT Keycloak)', () => {
         create: jest.fn(async ({ data }) => ({ id: 'art-1', ...data })),
         findMany: jest.fn().mockResolvedValue([]),
         findUnique: jest.fn(),
+        updateMany: jest.fn(),
       },
     };
 
@@ -221,5 +228,61 @@ describe('Articles API - intégration sécurité (JWT Keycloak)', () => {
 
     expect(prisma.article.create).not.toHaveBeenCalled();
     expect(bus.emit).not.toHaveBeenCalled();
+  });
+
+  it('publication → contrôle → statut : un article validé passe PUBLISHED', async () => {
+    let status = ArticleStatus.DRAFT;
+    prisma.article.updateMany.mockImplementation(async ({ data }) => {
+      status = data.status;
+      return { count: 1 };
+    });
+    prisma.article.findUnique.mockImplementation(async () => ({
+      id: 'art-1',
+      status,
+      rejectionReason: null,
+    }));
+    const token = await signToken(trustedKey, {
+      sub: 'seller-42',
+      roles: ['vendeur'],
+    });
+
+    await request(app.getHttpServer())
+      .post('/articles')
+      .set('Authorization', `Bearer ${token}`)
+      .send(VALID_ARTICLE)
+      .expect(201);
+    const [, submitted] = bus.emit.mock.calls[0];
+
+    await app
+      .get(ModerationResultsController)
+      .handleValidated({ articleId: submitted.articleId, reasons: [] });
+
+    const response = await request(app.getHttpServer())
+      .get('/articles/art-1')
+      .expect(200);
+    expect(response.body.status).toBe(ArticleStatus.PUBLISHED);
+  });
+
+  it('un article rejeté passe REJECTED avec son motif, un résultat redélivré est sans effet', async () => {
+    prisma.article.updateMany
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 0 });
+    const controller = app.get(ModerationResultsController);
+    const result = { articleId: 'art-9', reasons: ['prix manquant'] };
+
+    await controller.handleRejected(result);
+    await expect(controller.handleRejected(result)).resolves.toBeUndefined();
+
+    expect(prisma.article.updateMany).toHaveBeenCalledTimes(2);
+    expect(prisma.article.updateMany).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        where: expect.objectContaining({ id: 'art-9' }),
+        data: {
+          status: ArticleStatus.REJECTED,
+          rejectionReason: 'prix manquant',
+        },
+      }),
+    );
   });
 });
