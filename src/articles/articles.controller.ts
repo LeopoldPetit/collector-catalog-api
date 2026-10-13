@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { AuthenticatedUser } from '../auth/authenticated-user';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -22,7 +31,12 @@ export class ArticlesController {
   }
 
   @Get()
-  findAll() {
+  findAll(@Query('status') status?: string) {
+    if (status !== undefined && status !== 'published') {
+      throw new BadRequestException(
+        "Seul le statut 'published' est accessible publiquement",
+      );
+    }
     // US5 (catalogue public) : seuls les articles publiés sont exposés par cet endpoint
     return this.articlesService.findPublished();
   }
