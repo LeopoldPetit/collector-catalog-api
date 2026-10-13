@@ -1,4 +1,9 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { AuthenticatedUser } from '../auth/authenticated-user';
+import { CurrentUser } from '../auth/current-user.decorator';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Roles } from '../auth/roles.decorator';
+import { RolesGuard } from '../auth/roles.guard';
 import { ArticlesService } from './articles.service';
 import { CreateArticleDto } from './dto/create-article.dto';
 
@@ -7,10 +12,13 @@ export class ArticlesController {
   constructor(private readonly articlesService: ArticlesService) {}
 
   @Post()
-  create(@Body() dto: CreateArticleDto) {
-    // TODO(US1): remplacer par l'id du vendeur authentifié une fois le guard JWT en place
-    const sellerId = 'seller-placeholder';
-    return this.articlesService.create(dto, sellerId);
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('vendeur')
+  create(
+    @Body() dto: CreateArticleDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.articlesService.create(dto, user.sub);
   }
 
   @Get()
