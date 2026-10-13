@@ -1,4 +1,4 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { ArticleStatus } from '@prisma/client';
 import {
@@ -11,6 +11,7 @@ import {
 import * as request from 'supertest';
 import { of } from 'rxjs';
 import { AppModule } from '../app.module';
+import { configureApp } from '../app.setup';
 import { ModerationResultsController } from './moderation-results.controller';
 import { KEYCLOAK_OPTIONS, KeycloakOptions } from '../auth/keycloak.options';
 import { MODERATION_BUS } from '../messaging/messaging.module';
@@ -107,9 +108,7 @@ describe('Articles API - intégration sécurité (JWT Keycloak)', () => {
       .compile();
 
     app = moduleRef.createNestApplication();
-    app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, transform: true }),
-    );
+    configureApp(app);
     await app.init();
   });
 
@@ -214,6 +213,32 @@ describe('Articles API - intégration sécurité (JWT Keycloak)', () => {
     expect(bus.emit).toHaveBeenCalledWith(
       'article.submitted',
       expect.objectContaining({ articleId: 'art-1', sellerId: 'seller-42' }),
+    );
+  });
+
+  it('GET /articles?status=published reste accessible sans authentification', async () => {
+    await request(app.getHttpServer())
+      .get('/articles?status=published')
+      .expect(200);
+  });
+
+  it('GET /articles?status=draft est refusé pour un visiteur', async () => {
+    await request(app.getHttpServer())
+      .get('/articles?status=draft')
+      .expect(400);
+    expect(prisma.article.findMany).not.toHaveBeenCalled();
+  });
+
+  it('autorise le preflight CORS du frontend', async () => {
+    const response = await request(app.getHttpServer())
+      .options('/articles')
+      .set('Origin', 'http://localhost:5173')
+      .set('Access-Control-Request-Method', 'POST')
+      .set('Access-Control-Request-Headers', 'authorization,content-type')
+      .expect(204);
+
+    expect(response.headers['access-control-allow-origin']).toBe(
+      'http://localhost:5173',
     );
   });
 
