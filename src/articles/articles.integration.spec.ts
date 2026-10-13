@@ -9,8 +9,10 @@ import {
   SignJWT,
 } from 'jose';
 import * as request from 'supertest';
+import { of } from 'rxjs';
 import { AppModule } from '../app.module';
 import { KEYCLOAK_OPTIONS, KeycloakOptions } from '../auth/keycloak.options';
+import { MODERATION_BUS } from '../messaging/messaging.module';
 import { PrismaService } from '../prisma/prisma.service';
 
 const ISSUER = 'http://keycloak.test/realms/collector-shop';
@@ -35,6 +37,7 @@ describe('Articles API - intégration sécurité (JWT Keycloak)', () => {
   let app: INestApplication;
   let trustedKey: KeyLike;
   let untrustedKey: KeyLike;
+  let bus: { emit: jest.Mock };
   let prisma: {
     article: { create: jest.Mock; findMany: jest.Mock; findUnique: jest.Mock };
   };
@@ -83,6 +86,8 @@ describe('Articles API - intégration sécurité (JWT Keycloak)', () => {
       },
     };
 
+    bus = { emit: jest.fn(() => of(true)) };
+
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     })
@@ -90,6 +95,8 @@ describe('Articles API - intégration sécurité (JWT Keycloak)', () => {
       .useValue(prisma)
       .overrideProvider(KEYCLOAK_OPTIONS)
       .useValue(keycloak)
+      .overrideProvider(MODERATION_BUS)
+      .useValue(bus)
       .compile();
 
     app = moduleRef.createNestApplication();
