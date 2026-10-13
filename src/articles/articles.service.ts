@@ -44,6 +44,25 @@ export class ArticlesService {
     return article;
   }
 
+  // Transition seulement depuis DRAFT/PENDING : un résultat redélivré reste sans effet.
+  async applyModerationResult(
+    articleId: string,
+    status: Extract<ArticleStatus, 'PUBLISHED' | 'REJECTED'>,
+    reasons: string[],
+  ): Promise<number> {
+    const { count } = await this.prisma.article.updateMany({
+      where: {
+        id: articleId,
+        status: { in: [ArticleStatus.DRAFT, ArticleStatus.PENDING] },
+      },
+      data: {
+        status,
+        rejectionReason: reasons.length > 0 ? reasons.join(', ') : null,
+      },
+    });
+    return count;
+  }
+
   findPublished() {
     return this.prisma.article.findMany({
       where: { status: ArticleStatus.PUBLISHED },
