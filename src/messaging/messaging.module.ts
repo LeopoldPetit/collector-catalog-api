@@ -17,6 +17,7 @@ export const MODERATION_QUEUE = 'moderation';
           ],
           queue: MODERATION_QUEUE,
           queueOptions: { durable: true },
+          persistent: true,
         },
       },
     ]),
