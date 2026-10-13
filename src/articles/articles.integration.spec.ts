@@ -110,6 +110,10 @@ describe('Articles API - intégration sécurité (JWT Keycloak)', () => {
     await app.close();
   });
 
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('GET /articles reste public et ne retourne que les articles publiés', async () => {
     await request(app.getHttpServer()).get('/articles').expect(200);
 
@@ -200,5 +204,22 @@ describe('Articles API - intégration sécurité (JWT Keycloak)', () => {
       },
     });
     expect(response.body.sellerId).toBe('seller-42');
+    expect(bus.emit).toHaveBeenCalledWith(
+      'article.submitted',
+      expect.objectContaining({ articleId: 'art-1', sellerId: 'seller-42' }),
+    );
+  });
+
+  it('POST /articles rejette une annonce invalide sans persister ni publier', async () => {
+    const token = await signToken(trustedKey, { roles: ['vendeur'] });
+
+    await request(app.getHttpServer())
+      .post('/articles')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ ...VALID_ARTICLE, description: 'trop court' })
+      .expect(400);
+
+    expect(prisma.article.create).not.toHaveBeenCalled();
+    expect(bus.emit).not.toHaveBeenCalled();
   });
 });
