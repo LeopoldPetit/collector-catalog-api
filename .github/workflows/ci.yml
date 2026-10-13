@@ -1,0 +1,12 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-test-scan-build:
+    uses: LeopoldPetit/collector-infra/.github/workflows/reusable-lint-test-scan-build.yml@main
+    with:
+      image-name: ghcr.io/leopoldpetit/collector-catalog-api
