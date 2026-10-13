@@ -1,11 +1,23 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { AppModule } from './app.module';
+import { MODERATION_RESULTS_QUEUE } from './articles/events/moderation-result.event';
+import { RABBITMQ_URLS } from './messaging/rabbitmq.config';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  app.connectMicroservice<MicroserviceOptions>({
+    transport: Transport.RMQ,
+    options: {
+      urls: RABBITMQ_URLS,
+      queue: MODERATION_RESULTS_QUEUE,
+      queueOptions: { durable: true },
+    },
+  });
+  await app.startAllMicroservices();
   await app.listen(process.env.PORT ?? 3000);
 }
 bootstrap();

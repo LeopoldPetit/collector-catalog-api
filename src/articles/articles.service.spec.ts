@@ -14,6 +14,7 @@ describe('ArticlesService', () => {
       create: jest.Mock;
       findUnique: jest.Mock;
       findMany: jest.Mock;
+      updateMany: jest.Mock;
     };
   };
 
@@ -23,6 +24,7 @@ describe('ArticlesService', () => {
         create: jest.fn(),
         findUnique: jest.fn(),
         findMany: jest.fn(),
+        updateMany: jest.fn(),
       },
     };
 
@@ -119,5 +121,50 @@ describe('ArticlesService', () => {
       where: { status: ArticleStatus.PUBLISHED },
       orderBy: { createdAt: 'desc' },
     });
+  });
+
+  it('publie un article validé avec le statut PUBLISHED', async () => {
+    prisma.article.updateMany.mockResolvedValue({ count: 1 });
+
+    const count = await service.applyModerationResult(
+      'art-1',
+      ArticleStatus.PUBLISHED,
+      [],
+    );
+
+    expect(count).toBe(1);
+    expect(prisma.article.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'art-1',
+        status: { in: [ArticleStatus.DRAFT, ArticleStatus.PENDING] },
+      },
+      data: { status: ArticleStatus.PUBLISHED, rejectionReason: null },
+    });
+  });
+
+  it('enregistre les motifs de rejet', async () => {
+    prisma.article.updateMany.mockResolvedValue({ count: 1 });
+
+    await service.applyModerationResult('art-2', ArticleStatus.REJECTED, [
+      'prix manquant',
+      'catégorie inconnue',
+    ]);
+
+    expect(prisma.article.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          status: ArticleStatus.REJECTED,
+          rejectionReason: 'prix manquant, catégorie inconnue',
+        },
+      }),
+    );
+  });
+
+  it('ignore un résultat déjà traité', async () => {
+    prisma.article.updateMany.mockResolvedValue({ count: 0 });
+
+    await expect(
+      service.applyModerationResult('art-3', ArticleStatus.PUBLISHED, []),
+    ).resolves.toBe(0);
   });
 });
