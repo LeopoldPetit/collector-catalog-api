@@ -7,6 +7,10 @@ on:
 
 jobs:
   lint-test-scan-build:
+    permissions:
+      contents: read
+      packages: write
     uses: LeopoldPetit/collector-infra/.github/workflows/reusable-lint-test-scan-build.yml@main
     with:
       image-name: ghcr.io/leopoldpetit/collector-catalog-api
+      push-image: ${{ github.event_name == 'push' }}
