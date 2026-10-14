@@ -9,7 +9,7 @@ RUN npm run build
 FROM node:22-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
-RUN apk upgrade --no-cache
+RUN apk upgrade --no-cache && apk add --no-cache openssl
 COPY package*.json ./
 COPY prisma ./prisma
 # CLI Prisma pinné : devDependency absente de l'image, doit rester aligné sur @prisma/client
