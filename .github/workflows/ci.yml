@@ -40,25 +40,18 @@ jobs:
   sonar:
     name: Analyse SonarCloud + quality gate
     if: github.event_name != 'release'
+    needs: lint-test-scan-build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-node@v4
+      - name: Récupérer la couverture produite par lint-test
+        uses: actions/download-artifact@v4
         with:
-          node-version: "20"
-          cache: "npm"
-
-      - name: Install dependencies
-        run: npm ci --ignore-scripts
-
-      - name: Generate Prisma client
-        run: npm run prisma:generate
-
-      - name: Tests + couverture
-        run: npm run test:cov
+          name: coverage-collector-catalog-api
+          path: coverage
 
       - name: Analyse SonarCloud
         uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
