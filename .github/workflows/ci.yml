@@ -4,19 +4,42 @@ on:
   push:
     branches: [main]
   pull_request:
+  release:
+    types: [published]
 
 jobs:
-  lint-test-scan-build:
+  promote-prod:
+    if: github.event_name == 'release'
     permissions:
       contents: read
-      packages: write
+      id-token: write
+    uses: LeopoldPetit/collector-infra/.github/workflows/reusable-promote-prod.yml@main
+    with:
+      image-name: collector-catalog-api
+      gcp-project-id: ${{ vars.GCP_PROJECT_ID }}
+      gcp-region: ${{ vars.GCP_REGION || 'europe-west1' }}
+      artifact-repository: ${{ vars.GCP_ARTIFACT_REPOSITORY || 'collector' }}
+      workload-identity-provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      service-account: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
+
+  lint-test-scan-build:
+    if: github.event_name != 'release'
+    permissions:
+      contents: read
+      id-token: write
     uses: LeopoldPetit/collector-infra/.github/workflows/reusable-lint-test-scan-build.yml@main
     with:
-      image-name: ghcr.io/leopoldpetit/collector-catalog-api
+      image-name: collector-catalog-api
       push-image: ${{ github.event_name == 'push' }}
+      gcp-project-id: ${{ vars.GCP_PROJECT_ID }}
+      gcp-region: ${{ vars.GCP_REGION || 'europe-west1' }}
+      artifact-repository: ${{ vars.GCP_ARTIFACT_REPOSITORY || 'collector' }}
+      workload-identity-provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      service-account: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
 
   sonar:
     name: Analyse SonarCloud + quality gate
+    if: github.event_name != 'release'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
